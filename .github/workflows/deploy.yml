@@ -1,0 +1,46 @@
+name: Deploy NGINX Config
+
+on:
+    push:
+        branches:
+            - main
+
+jobs:
+    deploy:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Deploy configs
+              uses: appleboy/scp-action@v1.0.0
+              with:
+                  host: '87.242.119.108'
+                  username: 'nikiteo'
+                  key: ${{ secrets.SSH_PRIVATE_KEY }}
+                  source: 'configs/*.conf'
+                  target: '/tmp/nginx-configs/'
+                  rm: true
+
+            - name: Apply configs and reload nginx
+              uses: appleboy/ssh-action@v1.0.0
+              with:
+                host: '87.242.119.108'
+                username: 'nikiteo'
+                key: ${{ secrets.SSH_PRIVATE_KEY }}
+                script: |
+                  if [ -z "$(ls /tmp/nginx-configs/*.conf 2>/dev/null)" ]; then
+                    echo "❌ No .conf files found in /tmp/nginx-configs/"
+                    sudo ls -la /tmp/nginx-configs
+                    exit 1
+                  fi
+
+                  sudo cp -f /tmp/nginx-configs/*.conf /etc/nginx/sites-available/
+                  sudo chown root:root /etc/nginx/sites-available/*.conf
+                  sudo chmod 644 /etc/nginx/sites-available/*.conf
+
+                  sudo nginx -t || (echo "❌ Configuration error"; exit 1)
+
+                  sudo systemctl reload nginx
+                  echo "✅ Success"
